@@ -1,10 +1,7 @@
 import os
 from configparser import ConfigParser
 
-
-
 USER_AGENT = "Mozilla/5.0"
-
 
 
 def config(filename: str = None, section: str = "postgresql") -> dict:
