@@ -4,9 +4,9 @@ import psycopg2
 from psycopg2 import sql
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
-from company import Company
-from config import config
-from vacancy import Vacancy
+from .company import Company
+from .config import config
+from .vacancy import Vacancy
 
 
 class DBManager:
@@ -50,12 +50,18 @@ class DBManager:
         finally:
             conn.close()
 
+    import copy
+
     def connect(self) -> None:
-        """
-        Устанавливает соединение с базой данных, если оно ещё не установлено.
-        """
         if self.conn is None or self.conn.closed:
-            self.conn = psycopg2.connect(**self.params)
+            import copy
+            params_copy = copy.deepcopy(self.params)
+            for k, v in params_copy.items():
+                if isinstance(v, bytes):
+                    params_copy[k] = v.decode("utf-8", errors="replace")
+                else:
+                    params_copy[k] = str(v).strip()
+            self.conn = psycopg2.connect(**params_copy)
             self.conn.autocommit = True
 
     def close(self) -> None:
@@ -291,64 +297,3 @@ class DBManager:
             result.append(line)
 
         return result
-
-def test_db_output():
-    db_name = "hh_test_db"
-    db = DBManager()
-
-    # Создаем базу данных (если ещё не создана)
-    db.create_database(db_name)
-
-    # Подключаемся к базе и создаем таблицы
-    db = DBManager(dbname=db_name)
-    db.create_tables()
-
-    # Вставляем тестовые компании
-    companies = [
-        Company("1", "Компания А", "Москва", "https://hh.ru/employer/1"),
-        Company("2", "Компания Б", "Санкт-Петербург", "https://hh.ru/employer/2"),
-    ]
-    for company in companies:
-        db.insert_company(company)
-
-    # Вставляем тестовые вакансии с разными зарплатами
-    vacancies = [
-        Vacancy("Разработчик Python", "https://hh.ru/vacancy/1", 100000, 150000, "Описание вакансии 1"),
-        Vacancy("Тестировщик", "https://hh.ru/vacancy/2", None, 80000, "Описание вакансии 2"),
-        Vacancy("Менеджер проекта", "https://hh.ru/vacancy/3", 120000, None, "Описание вакансии 3"),
-        Vacancy("Аналитик", "https://hh.ru/vacancy/4", None, None, "Описание вакансии 4 без зарплаты"),
-    ]
-    db.insert_vacancy(vacancies[0], "1")
-    db.insert_vacancy(vacancies[1], "1")
-    db.insert_vacancy(vacancies[2], "2")
-    db.insert_vacancy(vacancies[3], "2")
-
-    # Вывод компаний и количества вакансий
-    print("Компании и количество вакансий:")
-    for name, count in db.get_companies_and_vacancies_count():
-        print(f"{name}: {count}")
-
-    # Вывод всех вакансий
-    print("\nВсе вакансии:")
-    for vacancy_str in db.get_all_vacancies():
-        print(vacancy_str)
-
-    # Средняя зарплата
-    avg_salary = db.get_avg_salary()
-    print(f"\nСредняя зарплата: {avg_salary if avg_salary is not None else 'Не рассчитана'}")
-
-    # Вакансии с зарплатой выше средней
-    print("\nВакансии с зарплатой выше средней:")
-    for vacancy_str in db.get_vacancies_with_higher_salary():
-        print(vacancy_str)
-
-    # Вакансии с ключевым словом "Python"
-    print("\nВакансии с ключевым словом 'Python':")
-    for vacancy_str in db.get_vacancies_with_keyword("Python"):
-        print(vacancy_str)
-
-    db.close()
-
-
-if __name__ == "__main__":
-    test_db_output()

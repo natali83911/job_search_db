@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-from config import USER_AGENT
+from .config import USER_AGENT
 
 
 class AbstractAPI(ABC):
@@ -69,25 +69,3 @@ class HeadHunterAPI(AbstractAPI):
         if not isinstance(items, list):
             return []
         return items
-
-
-if __name__ == "__main__":
-    api = HeadHunterAPI()
-
-    try:
-        vacancies = api.get_vacancies(keyword="разработчик", per_page=10)
-        print(f"Получено вакансий: {len(vacancies)}")
-        for v in vacancies:
-            print(f"Вакансия: {v.get('name')}, URL: {v.get('alternate_url')}")
-    except Exception as e:
-        print(f"Ошибка при получении вакансий: {e}")
-
-    print("\n" + "-" * 40 + "\n")
-
-    try:
-        employers = api.get_employers(text="it", per_page=10)
-        print(f"Найдено работодателей: {len(employers)}")
-        for e in employers:
-            print(f"Компания: {e.get('name')}, ID: {e.get('id')}")
-    except Exception as e:
-        print(f"Ошибка при поиске работодателей: {e}")
