@@ -1,17 +1,23 @@
-[project]
+[tool.poetry]
 name = "job-search-db"
 version = "0.1.0"
 description = ""
-authors = [
-    {name = "Your Name",email = "you@example.com"}
-]
+authors = ["Natalya Sorokina <natali83911@gmail.com>"]
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = [
-    "requests (>=2.32.4,<3.0.0)",
-    "psycopg2-binary (>=2.9.10,<3.0.0)"
+packages = [
+    { include = "config.py", from = "src" },
+    { include = "db_manager.py", from = "src" },
+    { include = "hh_api.py", from = "src" },
+    { include = "utils.py", from = "src" },
+    { include = "company.py", from = "src" },
+    { include = "vacancy.py", from = "src" },
 ]
 
+[tool.poetry.dependencies]
+python = ">=3.12"
+requests = ">=2.32.4,<3.0.0"
+psycopg2-binary = ">=2.9.10,<3.0.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
@@ -23,6 +29,9 @@ mypy = "^1.16.1"
 black = "^25.1.0"
 isort = "^6.0.1"
 
+[tool.poetry.group.dev.dependencies]
+types-requests = "^2.32.4.20250611"
+types-psycopg2 = "^2.9.21.20250516"
 
 [tool.mypy]
 disallow_untyped_defs = true
@@ -31,26 +40,18 @@ warn_return_any = true
 exclude = 'venv'
 
 [tool.black]
-# Максимальная длина строки
 line-length = 119
-# Файлы, которые не нужно форматировать
 exclude = '''
-(
-  /(
-      \.eggs         # Исключить несколько общих каталогов
-    | \.git          # в корне проекта
-    | \.hg
-    | \.mypy_cache
-    | \.tox
-    | \.venv
-    | dist
-  )/
-  | foo.py           # Также отдельно исключить файл с именем foo.py
-                     # в корне проекта
-)
+/(
+    \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | dist
+)/|foo.py
 '''
 
 [tool.isort]
-# максимальная длина строки
 line_length = 119
-
