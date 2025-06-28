@@ -4,7 +4,6 @@ version = "0.1.0"
 description = ""
 authors = ["Natalya Sorokina <natali83911@gmail.com>"]
 readme = "README.md"
-requires-python = ">=3.12"
 packages = [
     { include = "config.py", from = "src" },
     { include = "db_manager.py", from = "src" },
