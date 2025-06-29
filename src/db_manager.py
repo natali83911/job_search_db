@@ -1,12 +1,16 @@
-from typing import Optional, List, Tuple, Any, Dict
+from typing import Any, List, Optional, Tuple
+
 import psycopg2
 from psycopg2.extensions import connection
+
 from src.config import config
+
 
 class DBManager:
     """
     Класс для работы с базой данных PostgreSQL: выборка данных о компаниях и вакансиях.
     """
+
     def __init__(self, dbname: Optional[str] = None) -> None:
         """
         Инициализация менеджера БД.
@@ -23,13 +27,18 @@ class DBManager:
         """Устанавливает соединение с БД, если оно ещё не установлено."""
         if self.conn is None or self.conn.closed:
             import copy
-            params_copy = copy.deepcopy(self.params)
-            for k, v in params_copy.items():
+
+            temp_params = copy.deepcopy(self.params)
+
+            for k, v in temp_params.items():
                 if isinstance(v, bytes):
-                    params_copy[k] = v.decode("utf-8", errors="replace")
+                    temp_params[k] = v.decode("utf-8", errors="replace")
                 else:
-                    params_copy[k] = str(v).strip()
-            self.conn = psycopg2.connect(**params_copy)
+                    temp_params[k] = str(v).strip()
+
+            conn_params: dict[str, str] = {k: str(v) for k, v in temp_params.items()}
+
+            self.conn = psycopg2.connect(**conn_params)
             self.conn.autocommit = True
 
     def close(self) -> None:

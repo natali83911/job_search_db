@@ -1,12 +1,15 @@
-import psycopg2
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
-from psycopg2 import sql
+from typing import Any, Dict
 
+import psycopg2
+from psycopg2 import sql
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+
+from .company import Company
 from .config import config
 from .db_manager import DBManager
 from .hh_api import HeadHunterAPI
-from .company import Company
 from .vacancy import Vacancy
+
 
 def create_database(db_name: str) -> None:
     """
@@ -15,7 +18,7 @@ def create_database(db_name: str) -> None:
     :param db_name: Имя базы данных для создания.
     :return: None
     """
-    params = config()
+    params: Dict[str, Any] = config()
     params["database"] = "postgres"
     conn = psycopg2.connect(**params)
     conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
@@ -30,6 +33,7 @@ def create_database(db_name: str) -> None:
                 print(f"База данных '{db_name}' уже существует.")
     finally:
         conn.close()
+
 
 def fill_database_with_api_data(db_manager: DBManager, api: HeadHunterAPI) -> None:
     """
@@ -57,6 +61,7 @@ def fill_database_with_api_data(db_manager: DBManager, api: HeadHunterAPI) -> No
                 db_manager.insert_vacancy(vacancy, company.company_id)
     print("Данные успешно загружены и сохранены в базу.")
 
+
 def setup_and_fill_database(db_name: str = "hh_db") -> DBManager:
     """
     Полная инициализация базы: создание, создание таблиц, заполнение данными.
@@ -70,6 +75,7 @@ def setup_and_fill_database(db_name: str = "hh_db") -> DBManager:
     api = HeadHunterAPI()
     fill_database_with_api_data(db_manager, api)
     return db_manager
+
 
 def user_interface_with_keyword(db_manager: DBManager) -> None:
     """
@@ -136,4 +142,3 @@ def user_interface_with_keyword(db_manager: DBManager) -> None:
 
         else:
             print("Некорректный ввод. Пожалуйста, введите номер действия из списка.")
-

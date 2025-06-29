@@ -1,6 +1,6 @@
 import os
 from configparser import ConfigParser
-from typing import Optional, Dict
+from typing import Dict, Optional
 
 USER_AGENT = "Mozilla/5.0"
 
