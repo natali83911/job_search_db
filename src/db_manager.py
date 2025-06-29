@@ -1,18 +1,14 @@
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import psycopg2
-from psycopg2 import sql
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+from psycopg2.extensions import connection
 
-from company import Company
-from config import config
-from vacancy import Vacancy
+from src.config import config
 
 
 class DBManager:
     """
-    Класс для работы с базой данных PostgreSQL: создание базы, таблиц,
-    вставка и выборка данных о компаниях и вакансиях.
+    Класс для работы с базой данных PostgreSQL: выборка данных о компаниях и вакансиях.
     """
 
     def __init__(self, dbname: Optional[str] = None) -> None:
@@ -25,37 +21,24 @@ class DBManager:
         if dbname:
             params["database"] = dbname
         self.params = params
-        self.conn: Optional[psycopg2.extensions.connection] = None
-
-    def create_database(self, dbname: str) -> None:
-        """
-        Создаёт базу данных, если она ещё не существует.
-
-        :param dbname: Имя создаваемой базы данных
-        """
-        params = self.params.copy()
-        params["database"] = "postgres"
-
-        conn = psycopg2.connect(**params)
-        conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-        try:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1 FROM pg_catalog.pg_database WHERE datname = %s;", (dbname,))
-                exists = cur.fetchone()
-                if not exists:
-                    cur.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(dbname)))
-                    print(f"База данных '{dbname}' успешно создана.")
-                else:
-                    print(f"База данных '{dbname}' уже существует.")
-        finally:
-            conn.close()
+        self.conn: Optional[connection] = None
 
     def connect(self) -> None:
-        """
-        Устанавливает соединение с базой данных, если оно ещё не установлено.
-        """
+        """Устанавливает соединение с БД, если оно ещё не установлено."""
         if self.conn is None or self.conn.closed:
-            self.conn = psycopg2.connect(**self.params)
+            import copy
+
+            temp_params = copy.deepcopy(self.params)
+
+            for k, v in temp_params.items():
+                if isinstance(v, bytes):
+                    temp_params[k] = v.decode("utf-8", errors="replace")
+                else:
+                    temp_params[k] = str(v).strip()
+
+            conn_params: dict[str, str] = {k: str(v) for k, v in temp_params.items()}
+
+            self.conn = psycopg2.connect(**conn_params)
             self.conn.autocommit = True
 
     def close(self) -> None:
@@ -67,76 +50,78 @@ class DBManager:
 
     def create_tables(self) -> None:
         """
-        Создаёт таблицы companies и vacancies, если они ещё не существуют.
+        Создаёт таблицы компаний и вакансий, если они ещё не существуют.
         """
         self.connect()
-        with self.conn.cursor() as cur:
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS companies (
-                    company_id VARCHAR(50) PRIMARY KEY,
-                    name VARCHAR(255) NOT NULL,
-                    area VARCHAR(255),
-                    url VARCHAR(255)
-                );
-            """
-            )
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS vacancies (
-                    vacancy_id SERIAL PRIMARY KEY,
-                    company_id VARCHAR(50) REFERENCES companies(company_id) ON DELETE CASCADE,
-                    title VARCHAR(255) NOT NULL,
-                    salary_from INTEGER,
-                    salary_to INTEGER,
-                    url VARCHAR(255) NOT NULL UNIQUE,
-                    description TEXT
-                );
-            """
-            )
-        print("Таблицы успешно созданы или уже существуют.")
+        if self.conn is not None:
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS companies (
+                        company_id VARCHAR(50) PRIMARY KEY,
+                        name VARCHAR(255) NOT NULL,
+                        area VARCHAR(255),
+                        url VARCHAR(255)
+                    );
+                    """
+                )
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS vacancies (
+                        vacancy_id SERIAL PRIMARY KEY,
+                        company_id VARCHAR(50) REFERENCES companies(company_id) ON DELETE CASCADE,
+                        title VARCHAR(255) NOT NULL,
+                        salary_from INTEGER,
+                        salary_to INTEGER,
+                        url VARCHAR(255) NOT NULL UNIQUE,
+                        description TEXT
+                    );
+                    """
+                )
 
-    def insert_company(self, company: "Company") -> None:
+    def insert_company(self, company: Any) -> None:
         """
         Вставляет компанию в таблицу companies.
 
-        :param company: Объект компании для добавления
+        :param company: Объект компании для добавления.
         """
         self.connect()
-        with self.conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO companies (company_id, name, area, url)
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT (company_id) DO NOTHING;
-            """,
-                company.to_db_tuple(),
-            )
+        if self.conn is not None:
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO companies (company_id, name, area, url)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (company_id) DO NOTHING;
+                    """,
+                    company.to_db_tuple(),
+                )
 
-    def insert_vacancy(self, vacancy: "Vacancy", company_id: str) -> None:
+    def insert_vacancy(self, vacancy: Any, company_id: str) -> None:
         """
         Вставляет вакансию в таблицу vacancies.
 
-        :param vacancy: Объект вакансии для добавления
-        :param company_id: Идентификатор компании, к которой относится вакансия
+        :param vacancy: Объект вакансии для добавления.
+        :param company_id: Идентификатор компании, к которой относится вакансия.
         """
         self.connect()
-        with self.conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO vacancies (company_id, title, salary_from, salary_to, url, description)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (url) DO NOTHING;
-            """,
-                (
-                    company_id,
-                    vacancy.title,
-                    vacancy.salary_from,
-                    vacancy.salary_to,
-                    vacancy.url,
-                    vacancy.description,
-                ),
-            )
+        if self.conn is not None:
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO vacancies (company_id, title, salary_from, salary_to, url, description)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (url) DO NOTHING;
+                    """,
+                    (
+                        company_id,
+                        vacancy.title,
+                        vacancy.salary_from,
+                        vacancy.salary_to,
+                        vacancy.url,
+                        vacancy.description,
+                    ),
+                )
 
     def get_companies_and_vacancies_count(self) -> List[Tuple[str, int]]:
         """
@@ -145,17 +130,20 @@ class DBManager:
         :return: Список кортежей (название компании, количество вакансий)
         """
         self.connect()
-        with self.conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT c.name, COUNT(v.vacancy_id) AS vacancies_count
-                FROM companies c
-                LEFT JOIN vacancies v ON c.company_id = v.company_id
-                GROUP BY c.name
-                ORDER BY vacancies_count DESC;
-            """
-            )
-            return cur.fetchall()
+        if self.conn is not None:
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT c.name, COUNT(v.vacancy_id) AS vacancies_count
+                    FROM companies c
+                    LEFT JOIN vacancies v ON c.company_id = v.company_id
+                    GROUP BY c.name
+                    ORDER BY vacancies_count DESC;
+                    """
+                )
+                result = cur.fetchall()
+                return result
+        return []
 
     def get_all_vacancies(self) -> List[str]:
         """
@@ -164,15 +152,16 @@ class DBManager:
         :return: Список строк с информацией о вакансиях
         """
         self.connect()
-        with self.conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT c.name, v.title, v.salary_from, v.salary_to, v.url
-                FROM vacancies v
-                JOIN companies c ON v.company_id = c.company_id;
-            """
-            )
-            rows = cur.fetchall()
+        if self.conn is not None:
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT c.name, v.title, v.salary_from, v.salary_to, v.url
+                    FROM vacancies v
+                    JOIN companies c ON v.company_id = c.company_id;
+                    """
+                )
+                rows = cur.fetchall()
 
         result: List[str] = []
         for company, title, salary_from, salary_to, url in rows:
@@ -197,19 +186,21 @@ class DBManager:
         :return: Средняя зарплата или None, если данных нет
         """
         self.connect()
-        with self.conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT AVG(
-                    (COALESCE(salary_from, 0) + COALESCE(salary_to, 0)) /
-                    NULLIF(CASE WHEN salary_from IS NOT NULL AND salary_to IS NOT NULL THEN 2 ELSE 1 END, 0)
+        if self.conn is not None:
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT AVG(
+                        (COALESCE(salary_from, 0) + COALESCE(salary_to, 0)) /
+                        NULLIF(CASE WHEN salary_from IS NOT NULL AND salary_to IS NOT NULL THEN 2 ELSE 1 END, 0)
+                    )
+                    FROM vacancies
+                    WHERE salary_from IS NOT NULL OR salary_to IS NOT NULL;
+                    """
                 )
-                FROM vacancies
-                WHERE salary_from IS NOT NULL OR salary_to IS NOT NULL;
-            """
-            )
-            result = cur.fetchone()
-            return result[0] if result else None
+                result = cur.fetchone()
+                return result[0] if result else None
+        return None
 
     def get_vacancies_with_higher_salary(self) -> List[str]:
         """
@@ -222,15 +213,16 @@ class DBManager:
             return ["Средняя зарплата не рассчитана."]
 
         self.connect()
-        with self.conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT c.name, v.title, v.salary_from, v.salary_to, v.url
-                FROM vacancies v
-                JOIN companies c ON v.company_id = c.company_id;
-            """
-            )
-            rows = cur.fetchall()
+        if self.conn is not None:
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT c.name, v.title, v.salary_from, v.salary_to, v.url
+                    FROM vacancies v
+                    JOIN companies c ON v.company_id = c.company_id;
+                    """
+                )
+                rows = cur.fetchall()
 
         result: List[str] = []
         for company, title, salary_from, salary_to, url in rows:
@@ -264,17 +256,18 @@ class DBManager:
         :return: Список строк с информацией о вакансиях
         """
         self.connect()
-        with self.conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT c.name, v.title, v.salary_from, v.salary_to, v.url
-                FROM vacancies v
-                JOIN companies c ON v.company_id = c.company_id
-                WHERE v.title ILIKE %s;
-            """,
-                (f"%{keyword}%",),
-            )
-            rows = cur.fetchall()
+        if self.conn is not None:
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT c.name, v.title, v.salary_from, v.salary_to, v.url
+                    FROM vacancies v
+                    JOIN companies c ON v.company_id = c.company_id
+                    WHERE v.title ILIKE %s;
+                    """,
+                    (f"%{keyword}%",),
+                )
+                rows = cur.fetchall()
 
         result: List[str] = []
         for company, title, salary_from, salary_to, url in rows:
@@ -286,69 +279,6 @@ class DBManager:
                 salary_str = f"до {salary_to}"
             else:
                 salary_str = "Зарплата не указана"
-
             line = f"Компания: {company}, Вакансия: {title}, Зарплата: {salary_str}, Ссылка: {url}"
             result.append(line)
-
         return result
-
-def test_db_output():
-    db_name = "hh_test_db"
-    db = DBManager()
-
-    # Создаем базу данных (если ещё не создана)
-    db.create_database(db_name)
-
-    # Подключаемся к базе и создаем таблицы
-    db = DBManager(dbname=db_name)
-    db.create_tables()
-
-    # Вставляем тестовые компании
-    companies = [
-        Company("1", "Компания А", "Москва", "https://hh.ru/employer/1"),
-        Company("2", "Компания Б", "Санкт-Петербург", "https://hh.ru/employer/2"),
-    ]
-    for company in companies:
-        db.insert_company(company)
-
-    # Вставляем тестовые вакансии с разными зарплатами
-    vacancies = [
-        Vacancy("Разработчик Python", "https://hh.ru/vacancy/1", 100000, 150000, "Описание вакансии 1"),
-        Vacancy("Тестировщик", "https://hh.ru/vacancy/2", None, 80000, "Описание вакансии 2"),
-        Vacancy("Менеджер проекта", "https://hh.ru/vacancy/3", 120000, None, "Описание вакансии 3"),
-        Vacancy("Аналитик", "https://hh.ru/vacancy/4", None, None, "Описание вакансии 4 без зарплаты"),
-    ]
-    db.insert_vacancy(vacancies[0], "1")
-    db.insert_vacancy(vacancies[1], "1")
-    db.insert_vacancy(vacancies[2], "2")
-    db.insert_vacancy(vacancies[3], "2")
-
-    # Вывод компаний и количества вакансий
-    print("Компании и количество вакансий:")
-    for name, count in db.get_companies_and_vacancies_count():
-        print(f"{name}: {count}")
-
-    # Вывод всех вакансий
-    print("\nВсе вакансии:")
-    for vacancy_str in db.get_all_vacancies():
-        print(vacancy_str)
-
-    # Средняя зарплата
-    avg_salary = db.get_avg_salary()
-    print(f"\nСредняя зарплата: {avg_salary if avg_salary is not None else 'Не рассчитана'}")
-
-    # Вакансии с зарплатой выше средней
-    print("\nВакансии с зарплатой выше средней:")
-    for vacancy_str in db.get_vacancies_with_higher_salary():
-        print(vacancy_str)
-
-    # Вакансии с ключевым словом "Python"
-    print("\nВакансии с ключевым словом 'Python':")
-    for vacancy_str in db.get_vacancies_with_keyword("Python"):
-        print(vacancy_str)
-
-    db.close()
-
-
-if __name__ == "__main__":
-    test_db_output()
